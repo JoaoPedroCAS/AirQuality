@@ -1,196 +1,107 @@
-#include <NovaSDS011.h>
+  #include <Adafruit_Sensor.h>
 
-#define SDS_PIN_RX 0
-#define SDS_PIN_TX 1
+#include <DHT.h>
+#include <DHT_U.h>
+#include <SPI.h>
+#include<Wire.h>
+#include <SoftwareSerial.h>
+#include <LoRa.h>
+#include <SDS011.h>
+#include <lmic.h>
+#include <hal/hal.h>
+#include <SPI.h>
 
-NovaSDS011 sds011;
+#ifdef COMPILE_REGRESSION_TEST
+# define FILLMEIN 0
+#else
+# warning "You must replace the values marked FILLMEIN with real values from the TTN control panel!"
+# define FILLMEIN (#dont edit this, edit the lines that use FILLMEIN)
+#endif
 
-void testDataReportingMode(uint16_t device_id = 0xFFFF)
+#define DHTTYPE    DHT11
+const int DHTPIN = 3; 
+const int DISPLAY_ADDRESS_PIN = 0x3c;
+const int DISPLAY_SDA_PIN = 4;
+const int DISPLAY_SCL_PIN = 15;
+const int LORA_SCK_PIN = 5;
+const int LORA_MISO_PIN = 19;
+const int LORA_MOSI_PIN = 27;
+const int LORA_CS_PIN = 18;
+const int LORA_RST_PIN = 14;
+const int LORA_DIO0_PIN = 26;
+const int BAND = 433E6;
+const int fontHeight = 16;
+static const PROGMEM u1_t NWKSKEY[16] = {0xE0, 0x29, 0xF8, 0x8D, 0x9A, 0xFD, 0x30, 0xAA, 0x98, 0x82, 0xA1, 0x2E, 0x80, 0x57, 0x09, 0x68};
+static const u1_t PROGMEM APPSKEY[16] = {0xE3, 0x9E, 0xA3, 0x53, 0x2B, 0x2D, 0x24, 0x17, 0xC7, 0x03, 0x24, 0x67, 0x58, 0x2F, 0x56, 0x2A};
+static const u4_t DEVADDR = 0x260D5EE2;
+
+
+DHT dht(DHTPIN, DHTTYPE);
+float humidity;
+float temperature;
+
+float p10, p25;
+int err;
+
+SDS011 my_sds;
+
+#ifdef ESP32
+HardwareSerial port(2);
+#endif
+
+// Função que inicializa o radio lora
+bool loraBegin()
 {
-  Serial.println("Start: testDataReportingMode with ID " + String(device_id));
-
-  // Test Set to Active
-  if (!sds011.setDataReportingMode(DataReportingMode::active, device_id))
-  {
-    Serial.println("Fail: setting SDS011 Report Mode to active.");
-    return;
-  }
-  DataReportingMode reportMode = sds011.getDataReportingMode(device_id);
-  if (reportMode == DataReportingMode::report_error)
-  {
-    Serial.println("Fail: getting SDS011 Report Mode.");
-    return;
-  }
-  if (reportMode == DataReportingMode::query)
-  {
-    Serial.println("Fail: SDS011 Report Mode not as set.");
-    return;
-  }
-
-  // Test Set to Query
-  if (!sds011.setDataReportingMode(DataReportingMode::query, device_id))
-  {
-    Serial.println("Fail: setting SDS011 Report Mode to query.");
-    return;
-  }
-  reportMode = sds011.getDataReportingMode(device_id);
-  if (reportMode == DataReportingMode::report_error)
-  {
-    Serial.println("Fail: getting SDS011 Report Mode.");
-    return;
-  }
-  if (reportMode == DataReportingMode::active)
-  {
-    Serial.println("Fail: SDS011 Report Mode not as set.");
-    return;
-  }
-
-  // Test Set to Active Again
-  if (!sds011.setDataReportingMode(DataReportingMode::active, device_id))
-  {
-    Serial.println("Fail: setting SDS011 Report Mode to active.");
-    return;
-  }
-  reportMode = sds011.getDataReportingMode(device_id);
-  if (reportMode == DataReportingMode::report_error)
-  {
-    Serial.println("Fail: getting SDS011 Report Mode.");
-    return;
-  }
-  if (reportMode == DataReportingMode::query)
-  {
-    Serial.println("Fail: SDS011 Report Mode not as set.");
-    return;
-  }
-  Serial.println("Success: testDataReportingMod");
-}
-
-void testDataWorkingMode(uint16_t device_id = 0xFFFF)
-{
-  Serial.println("Start: testDataWorkingMode with ID " + String(device_id));
-
-  // Test Set to Sleep
-  if (!sds011.setWorkingMode(WorkingMode::sleep, device_id))
-  {
-    Serial.println("Fail: setting SDS011 Working Mode to sleep.");
-    return;
-  }
-
-  delay(4000); //Hear fan turning off
-  //Test Set to Work
-  if (!sds011.setWorkingMode(WorkingMode::work, device_id))
-  {
-    Serial.println("Fail: setting SDS011 Working Mode to work.");
-    return;
-  }
-  delay(400);
-  WorkingMode workingMode = sds011.getWorkingMode(device_id);
-  if (workingMode == WorkingMode::working_error)
-  {
-    Serial.println("Fail: getting SDS011 Working Mode.");
-    return;
-  }
-  if (workingMode == WorkingMode::sleep)
-  {
-    Serial.println("Fail: SDS011 Working Mode not as set.");
-    return;
-  }
-
-  Serial.println("Success: testDataWorkingMode");
-}
-
-void testDataDutyCycle(uint16_t device_id = 0xFFFF)
-{
-  Serial.println("Start: testDataDutyCycle with ID " + String(device_id));
-
-  // Test Set to 20
-  if (!sds011.setDutyCycle(20, device_id))
-  {
-    Serial.println("Fail: setting SDS011 duty cycle to 20.");
-    return;
-  }
-  uint8_t dutyCycle = sds011.getDutyCycle(device_id);
-  if (dutyCycle == 0xFF)
-  {
-    Serial.println("Fail: getting SDS011 duty cycle.");
-    return;
-  }
-  else if (dutyCycle != 20)
-  {
-    Serial.println("Fail: SDS011 duty cycle not set. Expected 20 get " + String(dutyCycle));
-    return;
-  }
-
-  // Test Set to 0
-  if (!sds011.setDutyCycle(0, device_id))
-  {
-    Serial.println("Fail: setting SDS011 duty cycle to 0.");
-    return;
-  }
-
-  Serial.println("Success: testDataDutyCycle");
-}
-
-void testSetDeviceID(uint16_t device_id = 0xFFFF)
-{
-  Serial.println("Start: testSetDeviceID to " + String(device_id));
-
-  if (!sds011.setDeviceID(device_id))
-  {
-    Serial.println("Fail setting SDS011 Device ID to 0xAAAA.");
-    return;
-  }
-
-  Serial.println("Success: testSetDeviceID");
+  SPI.begin(LORA_SCK_PIN, LORA_MISO_PIN, LORA_MOSI_PIN, LORA_CS_PIN);
+  LoRa.setPins(LORA_CS_PIN, LORA_RST_PIN, LORA_DIO0_PIN);
+  return LoRa.begin(BAND);
 }
 
 void setup()
 {
-  Serial.begin(115200); // Output to Serial at 9600 baud
-  sds011.begin(SDS_PIN_RX, SDS_PIN_TX);
+  Serial.begin(115200);
+  dht.begin();
+  my_sds.begin(&port);
+  Serial.println("Iniciando Transmissor.");
+  if(!loraBegin()) 
+  {
+    // Se não deu certo, exibimos falha de lora na serial
+    Serial.println("LoRa failed!");
+    // E deixamos em loop infinito
+    while (1);
+  }
+  delay(500);
+  Serial.println("Sensor SDS011 em conjunto com DHT11");
+  delay(1500);
 
-  //testDataReportingMode();
-  //testDataWorkingMode();
-  //testDataDutyCycle();
-  //testSetDeviceID(0xAAAA);
-
-  if (sds011.setWorkingMode(WorkingMode::work))
-  {
-    Serial.println("SDS011 working mode \"Work\"");
-  }
-  else
-  {
-    Serial.println("FAIL: Unable to set working mode \"Work\"");
-  }
-
-  SDS011Version version = sds011.getVersionDate();
-
-  if (version.valid)
-  {
-    Serial.println("SDS011 Firmware Vesion:\nYear: " + String(version.year) + "\nMonth: " +
-                   String(version.month) + "\nDay: " + String(version.day));
-  }
-  else
-  {
-    Serial.println("FAIL: Unable to obtain Software Version");
-  }
-
-  if (sds011.setDutyCycle(5))
-  {
-    Serial.println("SDS011 Duty Cycle set to 5min");
-  }
-  else
-  {
-    Serial.println("FAIL: Unable to set Duty Cycle");
-  }
 }
 
 void loop()
 {
-  float p25, p10;
-  if (sds011.queryData(p25, p10) == QuerryError::no_error)
-  {
-    Serial.println(String(millis() / 1000) + "s:PM2.5=" + String(p25) + ", PM10=" + String(p10));
-    delay(60000);
+  err = my_sds.read(&p25, &p10);
+  if (!err) {
+    Serial.println("P2.5: " + String(p25));
+    Serial.println("P10:  " + String(p10));
+    humidity = dht.readHumidity();
+    Serial.print("Umidade Relativa = ");
+    Serial.print(humidity, 0);
+    Serial.print("%  ");
+    temperature = dht.readTemperature();
+    Serial.print("Temperatura = ");
+    Serial.print(temperature, 0); 
+    Serial.println("ºC  ");
+
+    LoRa.beginPacket();
+    LoRa.print(temperature);
+    LoRa.print("|");
+    LoRa.print(humidity);
+    LoRa.print("|");
+    LoRa.print(p25);
+    LoRa.print("|");
+    LoRa.print(p10);
+    LoRa.print("|");
+    LoRa.endPacket();
   }
+  delay(100);
+    
 }
